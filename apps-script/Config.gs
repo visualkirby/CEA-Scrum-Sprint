@@ -8,10 +8,12 @@
  *   REVIEW_CATEGORY      sub-label for anything no rule places, e.g. Review
  *   MAX_THREADS_PER_RUN  threads sorted per run (Gmail search returns at most 500)
  *   BODY_CHARS           how much of the newest message body the rules read
+ *   LOG_TAB              tab in the same spreadsheet where each sorted thread is logged (CEA-3)
  */
 const CONFIG_KEYS = [
   'RULES_SHEET_ID',
   'RULES_TAB',
+  'LOG_TAB',
   'PARENT_LABEL',
   'REVIEW_CATEGORY',
   'MAX_THREADS_PER_RUN',
@@ -27,6 +29,7 @@ function getConfig_() {
   return {
     rulesSheetId: props.RULES_SHEET_ID,
     rulesTab: props.RULES_TAB,
+    logTab: props.LOG_TAB,
     parentLabel: props.PARENT_LABEL,
     reviewCategory: props.REVIEW_CATEGORY,
     maxThreads: Number(props.MAX_THREADS_PER_RUN),

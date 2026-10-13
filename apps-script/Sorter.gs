@@ -11,6 +11,7 @@ function sortJobSearch() {
   try {
     const result = runSort_(false);
     Logger.log('Sorted %s threads: %s', result.count, JSON.stringify(result.tally));
+    Logger.log('Logged %s new rows to the log tab.', result.logged);
   } finally {
     lock.releaseLock();
   }
@@ -35,6 +36,7 @@ function runSort_(dryRun) {
 
   const tally = {};
   const lines = [];
+  const entries = [];
   threads.forEach(thread => {
     const messages = thread.getMessages();
     const last = messages[messages.length - 1];
@@ -47,9 +49,21 @@ function runSort_(dryRun) {
     tally[category] = (tally[category] || 0) + 1;
     lines.push(category + ' | ' + last.getFrom() + ' | ' + last.getSubject() +
       (hit ? ' | rule row ' + hit.rule.row + ' "' + hit.rule.contains + '"' : ' | no rule'));
-    if (!dryRun) thread.addLabel(labels[category]);
+    if (!dryRun) {
+      thread.addLabel(labels[category]);
+      entries.push({
+        date: last.getDate(),
+        from: last.getFrom(),
+        subject: last.getSubject(),
+        category: category,
+        rule: hit ? 'row ' + hit.rule.row + ': "' + hit.rule.contains + '"' : 'no rule',
+        link: thread.getPermalink(),
+        threadId: thread.getId()
+      });
+    }
   });
-  return { count: threads.length, tally: tally, lines: lines };
+  const logged = dryRun ? 0 : appendLog_(cfg, entries);
+  return { count: threads.length, tally: tally, lines: lines, logged: logged };
 }
 
 /** Creates any missing Parent/Category labels and returns them keyed by category. */
