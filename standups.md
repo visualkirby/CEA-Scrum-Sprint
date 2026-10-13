@@ -7,3 +7,9 @@ Sprint 1: Mon 10/12 to Sun 10/18/2026. Goal: every job-search email gets sorted 
 - **Yesterday:** Set up the Jira Scrum space, entered the epic and 7 stories with points and acceptance criteria, started Sprint 1 (10 points).
 - **Today:** Move CEA-2 to In Progress, create the CEA-Scrum-Sprint repo, start the hourly sorter.
 - **Blockers:** None.
+
+## Wed 10/14
+
+- **Yesterday:** Shipped CEA-2 and CEA-3 (7 of 10 points). The hourly sorter labeled all 215 Job Search threads, and 10 of 10 hand-checked threads were right. The sort log wrote one row per labeled thread (64 rows, 5 of 5 spot-checked against Gmail). Added 15 rules and a whitespace fix after reading the Review pile, which dropped Review from 21 threads to 2.
+- **Today:** Read CEA-4's acceptance criteria and draft its design (save each response email as a PDF in Drive).
+- **Blockers:** Limited time today, so the CEA-4 build moves to Thursday. Three days left for 3 points.
