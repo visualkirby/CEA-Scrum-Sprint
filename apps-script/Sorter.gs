@@ -66,6 +66,25 @@ function runSort_(dryRun) {
   return { count: threads.length, tally: tally, lines: lines, logged: logged };
 }
 
+/**
+ * Removes the Review sub-label from every thread that has it, so the next sortJobSearch
+ * run classifies them again with the current rules. Threads already in the log keep their
+ * original log row; the log never writes a thread twice.
+ */
+function clearReview() {
+  const cfg = getConfig_();
+  const label = GmailApp.getUserLabelByName(cfg.parentLabel + '/' + cfg.reviewCategory);
+  if (!label) { Logger.log('No Review label found.'); return; }
+  let total = 0;
+  let batch;
+  do {
+    batch = label.getThreads(0, 100);
+    if (batch.length) label.removeFromThreads(batch);
+    total += batch.length;
+  } while (batch.length === 100);
+  Logger.log('Removed the Review label from %s threads.', total);
+}
+
 /** Creates any missing Parent/Category labels and returns them keyed by category. */
 function ensureLabels_(parent, categories) {
   const out = {};

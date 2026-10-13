@@ -19,7 +19,7 @@ function loadRules_(cfg) {
       order: Number(r[cOrder]),
       category: String(r[cCat]).trim(),
       field: String(r[cField]).trim().toLowerCase(),
-      contains: String(r[cContains]).trim().toLowerCase(),
+      contains: normalize_(String(r[cContains]).trim()),
       row: i + 2
     }))
     .filter(r => r.category && r.contains && !isNaN(r.order))
@@ -31,14 +31,26 @@ function loadRules_(cfg) {
 }
 
 /**
+ * Lowercases, turns curly apostrophes into straight ones, and collapses every run of
+ * whitespace (including non-breaking spaces and line breaks) into one space, so a rule
+ * like "other candidates" still matches when the email wraps or pads between the words.
+ */
+function normalize_(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[\s ]+/g, ' ');
+}
+
+/**
  * First matching rule wins. Fields: from, subject, body, subject_body.
  * Returns the rule's category, or null when nothing matches.
  */
 function classify_(rules, msg) {
   const text = {
-    from: msg.from.toLowerCase(),
-    subject: msg.subject.toLowerCase(),
-    body: msg.body.toLowerCase()
+    from: normalize_(msg.from),
+    subject: normalize_(msg.subject),
+    body: normalize_(msg.body)
   };
   text.subject_body = text.subject + '\n' + text.body;
   for (let i = 0; i < rules.length; i++) {
