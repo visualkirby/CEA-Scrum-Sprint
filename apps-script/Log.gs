@@ -5,6 +5,9 @@
  */
 const LOG_HEADERS = ['Logged At', 'Date Received', 'From', 'Subject', 'Sub-label', 'Rule', 'Thread Link', 'Thread ID'];
 
+/** CEA-4 writes each saved PDF's link here; saveResponses_ adds the column if it's missing. */
+const DRIVE_LINK_HEADER = 'Drive Link';
+
 function appendLog_(cfg, entries) {
   if (!entries.length) return 0;
   const ss = SpreadsheetApp.openById(cfg.rulesSheetId);

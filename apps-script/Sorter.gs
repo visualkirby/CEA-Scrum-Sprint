@@ -12,6 +12,8 @@ function sortJobSearch() {
     const result = runSort_(false);
     Logger.log('Sorted %s threads: %s', result.count, JSON.stringify(result.tally));
     Logger.log('Logged %s new rows to the log tab.', result.logged);
+    const saved = saveResponses_(getConfig_());
+    Logger.log('Saved %s response PDFs (%s waiting).', saved.saved, saved.remaining);
   } finally {
     lock.releaseLock();
   }

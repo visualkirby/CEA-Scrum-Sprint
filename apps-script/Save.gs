@@ -1,0 +1,208 @@
+/**
+ * CEA-4: save each response thread as a PDF in RESPONSES_FOLDER_ID/<Company>.
+ * Works from the sort log: rows whose sub-label is in RESPONSE_CATEGORIES and whose
+ * Drive Link cell is empty. The Drive Link cell is the "saved once" check.
+ */
+
+/** Run from the editor, or called at the end of each hourly sortJobSearch. */
+function saveResponses() {
+  const result = saveResponses_(getConfig_());
+  Logger.log('Saved %s PDFs (%s left for the next run).', result.saved, result.remaining);
+  result.lines.forEach(l => Logger.log(l));
+  return result;
+}
+
+function saveResponses_(cfg) {
+  const ss = SpreadsheetApp.openById(cfg.rulesSheetId);
+  const sheet = ss.getSheetByName(cfg.logTab);
+  if (!sheet || sheet.getLastRow() < 2) return { saved: 0, remaining: 0, lines: [] };
+
+  const linkCol = ensureDriveLinkColumn_(sheet);
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const col = name => {
+    const i = header.indexOf(name);
+    if (i < 0) throw new Error('Log tab is missing the "' + name + '" column');
+    return i;
+  };
+  const cDate = col('Date Received'), cFrom = col('From'), cSubject = col('Subject');
+  const cCat = col('Sub-label'), cThread = col('Thread ID'), cLink = linkCol - 1;
+
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  const todo = [];
+  rows.forEach((r, i) => {
+    if (cfg.responseCategories.indexOf(String(r[cCat]).trim()) < 0) return;
+    if (String(r[cLink]).trim()) return;
+    if (!String(r[cThread]).trim()) return;
+    todo.push({ row: i + 2, date: r[cDate], from: String(r[cFrom]), subject: String(r[cSubject]), threadId: String(r[cThread]) });
+  });
+
+  const senders = loadSenders_(ss, cfg.sendersTab);
+  const root = DriveApp.getFolderById(cfg.responsesFolderId);
+  const folderCache = {};
+  const lines = [];
+  let saved = 0;
+
+  todo.slice(0, cfg.maxSaves).forEach(item => {
+    const thread = GmailApp.getThreadById(item.threadId);
+    if (!thread) {
+      lines.push('row ' + item.row + ': thread not found, skipped');
+      return;
+    }
+    const company = companyFor_(item.from, item.subject, senders, cfg.unsortedFolder);
+    if (!folderCache[company]) folderCache[company] = childFolder_(root, company);
+    const name = fileName_(item.date, item.subject);
+    const pdf = threadPdf_(thread, name);
+    const file = folderCache[company].createFile(pdf);
+    sheet.getRange(item.row, linkCol).setValue(file.getUrl());
+    saved++;
+    lines.push('row ' + item.row + ': ' + company + ' / ' + file.getName());
+  });
+
+  return { saved: saved, remaining: Math.max(0, todo.length - saved), lines: lines };
+}
+
+/** Adds a "Drive Link" header at the end of the log if it isn't there. Returns its 1-based column. */
+function ensureDriveLinkColumn_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  const i = header.indexOf(DRIVE_LINK_HEADER);
+  if (i >= 0) return i + 1;
+  sheet.getRange(1, lastCol + 1).setValue(DRIVE_LINK_HEADER).setFontWeight('bold');
+  return lastCol + 1;
+}
+
+/**
+ * Senders tab: Domain, Company. Company is a folder name, or one of two markers:
+ *   ATS       the domain sends for many employers; use the sender's display name
+ *   UNSORTED  never guess a company for this domain (free mail, personal addresses)
+ */
+function loadSenders_(ss, tabName) {
+  const sheet = ss.getSheetByName(tabName);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  const values = sheet.getDataRange().getValues();
+  const header = values[0].map(h => String(h).trim().toLowerCase());
+  const cDomain = header.indexOf('domain'), cCompany = header.indexOf('company');
+  if (cDomain < 0 || cCompany < 0) throw new Error('Senders tab needs Domain and Company columns');
+  const map = {};
+  values.slice(1).forEach(r => {
+    const d = String(r[cDomain]).trim().toLowerCase();
+    const c = String(r[cCompany]).trim();
+    if (d && c) map[d] = c;
+  });
+  return map;
+}
+
+/**
+ * Company folder for a From header like "Acme Recruiting <jobs@acme.com>".
+ * Order: Senders tab company; for ATS and UNSORTED domains the subject line, then (ATS only)
+ * the display name; for any other domain the domain name.
+ */
+function companyFor_(from, subject, senders, unsorted) {
+  const m = String(from).match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
+  const display = m ? m[1].trim() : '';
+  const email = (m ? m[2] : String(from)).trim().toLowerCase();
+  const domain = email.split('@')[1] || '';
+  if (!domain) return unsorted;
+
+  const parts = domain.split('.');
+  let entry = null;
+  for (let i = 0; i < parts.length - 1 && entry === null; i++) {
+    const d = parts.slice(i).join('.');
+    if (senders[d]) entry = senders[d];
+  }
+
+  const marker = entry ? entry.toUpperCase() : '';
+  if (marker === 'UNSORTED' || marker === 'ATS') {
+    const fromSubject = companyFromSubject_(subject);
+    if (fromSubject) return safeName_(fromSubject);
+    if (marker === 'UNSORTED') return unsorted;
+    const name = cleanDisplayName_(display, domain);
+    return name ? safeName_(name) : unsorted;
+  }
+  if (entry) return safeName_(entry);
+
+  const stem = domainStem_(domain);
+  return stem ? safeName_(stem.charAt(0).toUpperCase() + stem.slice(1)) : unsorted;
+}
+
+/**
+ * Company named in a subject: "Thank you for applying to Chewy!", "opportunity at Scalian",
+ * "a job opportunity with Reworld". Cut at " - ", "(", "|" or end punctuation.
+ * Returns '' when no pattern fits or the result reads like a job title or a sentence.
+ */
+function companyFromSubject_(subject) {
+  const m = String(subject || '').match(
+    /\b(?:applying to|applied to|application to|opportunity at|opportunity with|position at|role at|job at|interest in joining)\s+(.+)$/i);
+  if (!m) return '';
+  const name = m[1].split(/\s[-–|]\s|\(|[!?.,:;]/)[0].trim();
+  if (!name || name.length > 40) return '';
+  if (/^(the|a|an|our|your|this|that)\b/i.test(name)) return '';
+  return name;
+}
+
+/**
+ * Strips recruiting filler from a display name ("Acme Talent Acquisition via Indeed" -> "Acme"),
+ * plus any word that is part of the ATS's own domain ("Reworld Workday" from myworkday.com -> "Reworld").
+ * Returns '' when nothing company-like is left, or when the name is just the ATS itself.
+ */
+function cleanDisplayName_(display, domain) {
+  const stem = domainStem_(domain).replace(/[^a-z0-9]/g, '');
+  let s = String(display)
+    .replace(/\s+via\s+.*$/i, '')
+    .replace(/\b(talent acquisition|recruiting|recruitment|careers?|hiring|team|jobs?|hr|human resources|notifications?|no-?reply|do not reply)\b/gi, ' ')
+    .replace(/[|,:\-]+/g, ' ')
+    .split(/\s+/)
+    .filter(w => {
+      const t = w.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return t && !(t.length >= 3 && stem.indexOf(t) >= 0);
+    })
+    .join(' ')
+    .trim();
+  if (!s) return '';
+  const flat = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!flat || (stem && (stem.indexOf(flat) >= 0 || flat.indexOf(stem) >= 0))) return '';
+  return s;
+}
+
+/** "careers.acme.co.uk" -> "acme", "mail.acme.com" -> "acme". */
+function domainStem_(domain) {
+  const parts = String(domain).toLowerCase().split('.').filter(Boolean);
+  if (parts.length < 2) return parts[0] || '';
+  const tld = parts[parts.length - 1];
+  const sld = parts[parts.length - 2];
+  const twoPart = tld.length === 2 && sld.length <= 3 && parts.length >= 3;
+  return twoPart ? parts[parts.length - 3] : sld;
+}
+
+function childFolder_(root, name) {
+  const it = root.getFoldersByName(name);
+  return it.hasNext() ? it.next() : root.createFolder(name);
+}
+
+/** "2026-10-13 Your application to Acme" with characters Drive and Windows dislike removed. */
+function fileName_(date, subject) {
+  const d = date instanceof Date ? date : new Date(date);
+  const day = isNaN(d) ? 'undated' : Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const subj = safeName_(subject || '(no subject)').slice(0, 120);
+  return day + ' ' + subj;
+}
+
+function safeName_(s) {
+  return String(s).replace(/[\\\/:*?"<>|#%\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** One PDF for the whole thread: each message's From / To / Date / Subject, then its HTML body. */
+function threadPdf_(thread, name) {
+  const tz = Session.getScriptTimeZone();
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const parts = thread.getMessages().map(msg =>
+    '<div style="font-family:Arial,sans-serif;font-size:11px;border-bottom:1px solid #999;padding:6px 0;margin:12px 0 8px">' +
+      '<b>From:</b> ' + esc(msg.getFrom()) + '<br>' +
+      '<b>To:</b> ' + esc(msg.getTo()) + '<br>' +
+      '<b>Date:</b> ' + esc(Utilities.formatDate(msg.getDate(), tz, 'yyyy-MM-dd HH:mm z')) + '<br>' +
+      '<b>Subject:</b> ' + esc(msg.getSubject()) +
+    '</div>' + msg.getBody()
+  );
+  const html = '<html><head><meta charset="utf-8"></head><body>' + parts.join('<br>') + '</body></html>';
+  return Utilities.newBlob(html, 'text/html', name + '.html').getAs('application/pdf').setName(name + '.pdf');
+}
