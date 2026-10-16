@@ -14,6 +14,7 @@
  *   UNSORTED_FOLDER      folder under the root for PDFs with no known company, e.g. _Unsorted
  *   SENDERS_TAB          tab mapping sender domains to companies (Domain, Company)
  *   MAX_SAVES_PER_RUN    PDFs saved per run
+ *   RECHECK_DAYS         how far back the re-check looks for new messages in sorted threads (CEA-9)
  */
 const CONFIG_KEYS = [
   'RULES_SHEET_ID',
@@ -27,7 +28,8 @@ const CONFIG_KEYS = [
   'RESPONSE_CATEGORIES',
   'UNSORTED_FOLDER',
   'SENDERS_TAB',
-  'MAX_SAVES_PER_RUN'
+  'MAX_SAVES_PER_RUN',
+  'RECHECK_DAYS'
 ];
 
 function getConfig_() {
@@ -48,7 +50,8 @@ function getConfig_() {
     responseCategories: props.RESPONSE_CATEGORIES.split(',').map(s => s.trim()).filter(Boolean),
     unsortedFolder: props.UNSORTED_FOLDER,
     sendersTab: props.SENDERS_TAB,
-    maxSaves: Number(props.MAX_SAVES_PER_RUN)
+    maxSaves: Number(props.MAX_SAVES_PER_RUN),
+    recheckDays: Number(props.RECHECK_DAYS)
   };
 }
 

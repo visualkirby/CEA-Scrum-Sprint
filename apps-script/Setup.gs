@@ -67,6 +67,13 @@ function setupResponses() {
   checkConfig();
 }
 
+/** CEA-9 one-time setup: sets RECHECK_DAYS to 2 if it isn't set. Safe to run again. */
+function setupRecheck() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  if (!props.RECHECK_DAYS) setConfig_('RECHECK_DAYS', '2');
+  checkConfig();
+}
+
 /**
  * Test helper for CEA-4: moves every PDF linked in the log's Drive Link column to the Drive
  * trash (recoverable for 30 days) and clears those cells, so saveResponses() redoes them.
