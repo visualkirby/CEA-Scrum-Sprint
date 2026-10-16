@@ -143,12 +143,35 @@ function companyFromSubject_(subject) {
 /**
  * Strips recruiting filler from a display name ("Acme Talent Acquisition via Indeed" -> "Acme"),
  * plus any word that is part of the ATS's own domain ("Reworld Workday" from myworkday.com -> "Reworld").
+ * CEA-11: a name joined with "from", "by", "at" or "/" is split into parts first, then one part is
+ * kept: a part that repeats ("Tractor Supply Careers from Tractor Supply/Petsense by Tractor Supply"
+ * -> "Tractor Supply"), else the part after "from" ("Olivia from Acme" -> "Acme"), else the first.
  * Returns '' when nothing company-like is left, or when the name is just the ATS itself.
  */
 function cleanDisplayName_(display, domain) {
   const stem = domainStem_(domain).replace(/[^a-z0-9]/g, '');
-  let s = String(display)
-    .replace(/\s+via\s+.*$/i, '')
+  const raw = String(display).replace(/\s+via\s+.*$/i, '');
+  const fromMatch = raw.match(/\s+from\s+(.+)$/i);
+  const parts = raw.split(/\s+(?:from|by|at)\s+|\//i).map(p => cleanNamePart_(p, stem)).filter(Boolean);
+  if (!parts.length) return '';
+
+  const key = p => p.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const counts = {};
+  parts.forEach(p => { counts[key(p)] = (counts[key(p)] || 0) + 1; });
+  let s = parts.find(p => counts[key(p)] > 1);
+  if (!s && fromMatch) {
+    s = cleanNamePart_(fromMatch[1].split(/\s+(?:by|at)\s+|\//i)[0], stem);
+  }
+  if (!s) s = parts[0];
+
+  const flat = key(s);
+  if (!flat || (stem && (stem.indexOf(flat) >= 0 || flat.indexOf(stem) >= 0))) return '';
+  return s;
+}
+
+/** One part of a display name with recruiting filler and ATS-brand words removed. */
+function cleanNamePart_(part, stem) {
+  return String(part)
     .replace(/\b(talent acquisition|recruiting|recruitment|careers?|hiring|team|jobs?|hr|human resources|notifications?|no-?reply|do not reply)\b/gi, ' ')
     .replace(/[|,:\-]+/g, ' ')
     .split(/\s+/)
@@ -158,10 +181,70 @@ function cleanDisplayName_(display, domain) {
     })
     .join(' ')
     .trim();
-  if (!s) return '';
-  const flat = s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!flat || (stem && (stem.indexOf(flat) >= 0 || flat.indexOf(stem) >= 0))) return '';
-  return s;
+}
+
+/** Dry run of refileResponses(): lists every saved PDF that would move, and where. */
+function previewRefile() {
+  const result = refile_(true);
+  result.lines.forEach(l => Logger.log(l));
+  Logger.log('Preview: %s of %s saved PDFs would move.', result.moved, result.checked);
+}
+
+/**
+ * CEA-11: works out the company again for every log row with a Drive Link and moves the PDF
+ * when it sits in a different folder, then trashes company folders left empty (recoverable
+ * for 30 days). Run after a change to companyFor_ so existing PDFs follow the new names.
+ */
+function refileResponses() {
+  const result = refile_(false);
+  result.lines.forEach(l => Logger.log(l));
+  Logger.log('Moved %s of %s saved PDFs; trashed %s empty folders.', result.moved, result.checked, result.trashed);
+}
+
+function refile_(dryRun) {
+  const cfg = getConfig_();
+  const ss = SpreadsheetApp.openById(cfg.rulesSheetId);
+  const sheet = ss.getSheetByName(cfg.logTab);
+  const out = { checked: 0, moved: 0, trashed: 0, lines: [] };
+  if (!sheet || sheet.getLastRow() < 2) return out;
+
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const col = name => {
+    const i = header.indexOf(name);
+    if (i < 0) throw new Error('Log tab is missing the "' + name + '" column');
+    return i;
+  };
+  const cFrom = col('From'), cSubject = col('Subject'), cLink = col(DRIVE_LINK_HEADER);
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  const senders = loadSenders_(ss, cfg.sendersTab);
+  const root = DriveApp.getFolderById(cfg.responsesFolderId);
+  const folderCache = {};
+
+  rows.forEach((r, i) => {
+    const link = String(r[cLink]);
+    const m = link.match(/\/d\/([\w-]+)/) || link.match(/[?&]id=([\w-]+)/);
+    if (!m) return;
+    out.checked++;
+    const file = DriveApp.getFileById(m[1]);
+    const parents = file.getParents();
+    const current = parents.hasNext() ? parents.next().getName() : '(none)';
+    const company = companyFor_(String(r[cFrom]), String(r[cSubject]), senders, cfg.unsortedFolder);
+    if (current === company) return;
+    out.moved++;
+    out.lines.push('row ' + (i + 2) + ': ' + current + ' -> ' + company + ' | ' + file.getName());
+    if (dryRun) return;
+    if (!folderCache[company]) folderCache[company] = childFolder_(root, company);
+    file.moveTo(folderCache[company]);
+  });
+
+  if (!dryRun) {
+    const it = root.getFolders();
+    while (it.hasNext()) {
+      const f = it.next();
+      if (!f.getFiles().hasNext() && !f.getFolders().hasNext()) { f.setTrashed(true); out.trashed++; }
+    }
+  }
+  return out;
 }
 
 /** "careers.acme.co.uk" -> "acme", "mail.acme.com" -> "acme". */
