@@ -50,12 +50,14 @@ function setupResponses() {
     Logger.log('Created %s tab.', cfg.sendersTab);
   }
   const starter = [
-    'myworkday.com', 'myworkdayjobs.com', 'greenhouse.io', 'greenhouse-mail.io', 'icims.com',
+    'myworkdayjobs.com', 'greenhouse.io', 'greenhouse-mail.io',
     'lever.co', 'hire.lever.co', 'indeed.com', 'indeedemail.com', 'linkedin.com', 'smartrecruiters.com',
     'jobvite.com', 'taleo.net', 'successfactors.com', 'ziprecruiter.com', 'clinchtalent.com',
-    'paylocity.com', 'paycomonline.net', 'ultipro.com', 'adp.com', 'appone.com', 'applytojob.com',
+    'paylocity.com', 'paycomonline.net', 'ultipro.com', 'appone.com', 'applytojob.com',
     'bamboohr.com', 'paradox.ai'
-  ].map(d => [d, 'ATS']).concat([
+  ].map(d => [d, 'ATS']).concat(
+    ADDRESS_SENDERS.map(d => [d, 'ATS_ADDRESS'])
+  ).concat([
     'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com', 'icloud.com'
   ].map(d => [d, 'UNSORTED'])).concat([
     ['pg.com', 'P&G']
@@ -65,6 +67,31 @@ function setupResponses() {
   if (add.length) sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 2).setValues(add);
   Logger.log('Senders tab: added %s starter rows.', add.length);
   checkConfig();
+}
+
+/** Starter domains whose sender address names the employer (CEA-10). */
+const ADDRESS_SENDERS = ['myworkday.com', 'icims.com', 'adp.com'];
+
+/**
+ * CEA-10 one-time setup: on the Senders tab, switches the ADDRESS_SENDERS rows still marked
+ * ATS to ATS_ADDRESS. Rows with any other company are left alone. Safe to run again.
+ */
+function setupAddressSenders() {
+  const cfg = getConfig_();
+  const sheet = SpreadsheetApp.openById(cfg.rulesSheetId).getSheetByName(cfg.sendersTab);
+  const values = sheet.getDataRange().getValues();
+  const header = values[0].map(h => String(h).trim().toLowerCase());
+  const cDomain = header.indexOf('domain'), cCompany = header.indexOf('company');
+  let changed = 0;
+  values.forEach((r, i) => {
+    if (i === 0) return;
+    const d = String(r[cDomain]).trim().toLowerCase();
+    if (ADDRESS_SENDERS.indexOf(d) >= 0 && String(r[cCompany]).trim().toUpperCase() === 'ATS') {
+      sheet.getRange(i + 1, cCompany + 1).setValue('ATS_ADDRESS');
+      changed++;
+    }
+  });
+  Logger.log('Senders tab: %s rows switched to ATS_ADDRESS.', changed);
 }
 
 /** CEA-9 one-time setup: sets RECHECK_DAYS to 2 if it isn't set. Safe to run again. */

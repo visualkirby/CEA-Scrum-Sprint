@@ -72,9 +72,10 @@ function ensureDriveLinkColumn_(sheet) {
 }
 
 /**
- * Senders tab: Domain, Company. Company is a folder name, or one of two markers:
- *   ATS       the domain sends for many employers; use the sender's display name
- *   UNSORTED  never guess a company for this domain (free mail, personal addresses)
+ * Senders tab: Domain, Company. Company is a folder name, or one of three markers:
+ *   ATS          the domain sends for many employers; use the sender's display name
+ *   ATS_ADDRESS  like ATS, but the employer is in the address itself (ADP, Workday, iCIMS)
+ *   UNSORTED     never guess a company for this domain (free mail, personal addresses)
  */
 function loadSenders_(ss, tabName) {
   const sheet = ss.getSheetByName(tabName);
@@ -94,8 +95,9 @@ function loadSenders_(ss, tabName) {
 
 /**
  * Company folder for a From header like "Acme Recruiting <jobs@acme.com>".
- * Order: Senders tab company; for ATS and UNSORTED domains the subject line, then (ATS only)
- * the display name; for any other domain the domain name.
+ * Order: Senders tab company; for ATS, ATS_ADDRESS and UNSORTED domains the subject line, then
+ * (ATS_ADDRESS only) the address, then (ATS and ATS_ADDRESS) the display name; for any other
+ * domain the domain name.
  */
 function companyFor_(from, subject, senders, unsorted) {
   const m = String(from).match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
@@ -112,10 +114,14 @@ function companyFor_(from, subject, senders, unsorted) {
   }
 
   const marker = entry ? entry.toUpperCase() : '';
-  if (marker === 'UNSORTED' || marker === 'ATS') {
+  if (marker === 'UNSORTED' || marker === 'ATS' || marker === 'ATS_ADDRESS') {
     const fromSubject = companyFromSubject_(subject);
     if (fromSubject) return safeName_(fromSubject);
     if (marker === 'UNSORTED') return unsorted;
+    if (marker === 'ATS_ADDRESS') {
+      const fromAddress = companyFromAddress_((m ? m[2] : String(from)).trim().split('@')[0]);
+      if (fromAddress) return safeName_(fromAddress);
+    }
     const name = cleanDisplayName_(display, domain);
     return name ? safeName_(name) : unsorted;
   }
@@ -138,6 +144,30 @@ function companyFromSubject_(subject) {
   if (!name || name.length > 40) return '';
   if (/^(the|a|an|our|your|this|that)\b/i.test(name)) return '';
   return name;
+}
+
+/**
+ * CEA-10: company from the local part of an ATS address. Cuts at the first "+" (iCIMS
+ * "herbalife+email+6do6@talent.icims.com"), drops a role suffix after a dot ("EaglePhysicians.hr")
+ * and a trailing Inc/LLC/Corp, then splits CamelCase, including a lowercase "of" glued to the
+ * word before it ("PiedmontMetalsofBurlington" -> "Piedmont Metals of Burlington"). Only "of":
+ * "and" would break "HighlandPark". All-lowercase names stay whole ("waynefarms" -> "Waynefarms").
+ * Returns '' for a generic local part (noreply, careers, ...), so the caller falls through.
+ */
+function companyFromAddress_(local) {
+  const generic = /^(no-?reply|do-?not-?reply|careers?|jobs?|hr|talent|recruiting|notifications?|autoreply|email)$/i;
+  let s = String(local || '').split('+')[0];
+  s = s.split('.').filter(p => p && !generic.test(p)).join(' ');
+  if (!s || generic.test(s)) return '';
+  s = s.replace(/(?:inc|llc|corp)$/i, m => (s.length - m.length >= 3 ? '' : m));
+  s = s.replace(/([a-z]{3})of(?=[A-Z])/g, '$1 of ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/[_\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s || generic.test(s)) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
