@@ -113,7 +113,7 @@ function runRecheck_(dryRun) {
     if (!msg) return;
     const id = thread.getId();
     // Only the message key, not "newer than the last log row": that row can be my own reply,
-    // which is later than the message that actually matters (the Herbalife invite, 10/16).
+    // which is later than the message that actually matters (an interview invite, 10/16).
     if (logged.has(logKey_(id, msg.getDate()))) return;
 
     count++;

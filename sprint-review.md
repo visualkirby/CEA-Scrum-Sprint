@@ -9,8 +9,8 @@
 - **CEA-2:** the hourly sorter labeled the 215-thread Job Search backlog; 10 of 10 hand-checked threads were right. Reading the Review pile led to a whitespace/apostrophe fix plus 15 rules, and Review dropped from 21 threads to 2.
 - **CEA-3:** every sorted thread gets one Log row, deduped by thread ID. 5 of 5 spot-checked against Gmail.
 - **CEA-4:** response emails save as PDFs in Drive company folders. The done check saved 16 with 0 left.
-- **CEA-9:** a thread re-sorts when a new message arrives. Herbalife's interview invite moved from Review to Interview.
-- **CEA-11 + CEA-10:** clean folder names, and the company comes from ADP, Workday and iCIMS sender addresses. The refile moved 7 of 19 PDFs out of `_Unsorted` and "Sean Egan."
+- **CEA-9:** a thread re-sorts when a new message arrives. An employer's interview invite moved from Review to Interview.
+- **CEA-11 + CEA-10:** clean folder names, and the company comes from ADP, Workday and iCIMS sender addresses. The refile moved 7 of 19 PDFs out of `_Unsorted` and a folder named after a recruiter.
 - **CEA-5:** personal API keys for scripts. First story through a full adversarial review loop; the hardening shipped as b56b1cb, and a key sent in `?token=` now gets a 401.
 
 ## Shipped outside the board

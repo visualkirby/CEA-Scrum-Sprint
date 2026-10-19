@@ -132,8 +132,8 @@ function companyFor_(from, subject, senders, unsorted) {
 }
 
 /**
- * Company named in a subject: "Thank you for applying to Chewy!", "opportunity at Scalian",
- * "a job opportunity with Reworld". Cut at " - ", "(", "|" or end punctuation.
+ * Company named in a subject: "Thank you for applying to Acme!", "opportunity at Globex",
+ * "a job opportunity with Initech". Cut at " - ", "(", "|" or end punctuation.
  * Returns '' when no pattern fits or the result reads like a job title or a sentence.
  */
 function companyFromSubject_(subject) {
@@ -148,10 +148,10 @@ function companyFromSubject_(subject) {
 
 /**
  * CEA-10: company from the local part of an ATS address. Cuts at the first "+" (iCIMS
- * "herbalife+email+6do6@talent.icims.com"), drops a role suffix after a dot ("EaglePhysicians.hr")
+ * "acme+email+x1y2@talent.icims.com"), drops a role suffix after a dot ("GlobexHealth.hr")
  * and a trailing Inc/LLC/Corp, then splits CamelCase, including a lowercase "of" glued to the
- * word before it ("PiedmontMetalsofBurlington" -> "Piedmont Metals of Burlington"). Only "of":
- * "and" would break "HighlandPark". All-lowercase names stay whole ("waynefarms" -> "Waynefarms").
+ * word before it ("AcmeMetalsofSpringfield" -> "Acme Metals of Springfield"). Only "of":
+ * "and" would break "HighlandPark". All-lowercase names stay whole ("initechfarms" -> "Initechfarms").
  * Returns '' for a generic local part (noreply, careers, ...), so the caller falls through.
  */
 function companyFromAddress_(local) {
@@ -172,10 +172,10 @@ function companyFromAddress_(local) {
 
 /**
  * Strips recruiting filler from a display name ("Acme Talent Acquisition via Indeed" -> "Acme"),
- * plus any word that is part of the ATS's own domain ("Reworld Workday" from myworkday.com -> "Reworld").
+ * plus any word that is part of the ATS's own domain ("Globex Workday" from myworkday.com -> "Globex").
  * CEA-11: a name joined with "from", "by", "at" or "/" is split into parts first, then one part is
- * kept: a part that repeats ("Tractor Supply Careers from Tractor Supply/Petsense by Tractor Supply"
- * -> "Tractor Supply"), else the part after "from" ("Olivia from Acme" -> "Acme"), else the first.
+ * kept: a part that repeats ("Acme Careers from Acme/Acme Pets by Acme"
+ * -> "Acme"), else the part after "from" ("Olivia from Acme" -> "Acme"), else the first.
  * Returns '' when nothing company-like is left, or when the name is just the ATS itself.
  */
 function cleanDisplayName_(display, domain) {
